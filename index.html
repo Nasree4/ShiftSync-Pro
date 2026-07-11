@@ -296,6 +296,16 @@
         return saved ? JSON.parse(saved) : defaultShifts;
       });
 
+      // Refs to keep track of current states in async Firebase listeners without triggering effect recreation
+      const staffListRef = useRef(staffList);
+      const shiftMasterRef = useRef(shiftMaster);
+      useEffect(() => {
+        staffListRef.current = staffList;
+      }, [staffList]);
+      useEffect(() => {
+        shiftMasterRef.current = shiftMaster;
+      }, [shiftMaster]);
+
       const [activeUserId, setActiveUserId] = useState(() => {
         const saved = localStorage.getItem("shiftsync_active_user");
         return saved || "STF001";
@@ -383,7 +393,10 @@
           if (val) {
             setStaffList(val);
           } else {
-            staffRef.set(INITIAL_STAFF);
+            // Write current local staffList if it exists, preserving offline registered users
+            staffRef.set(staffListRef.current && staffListRef.current.length > 0 ? staffListRef.current : INITIAL_STAFF).catch(err => {
+              console.error("Firebase staff bootstrap error:", err);
+            });
           }
         }, handleSyncError);
 
@@ -394,8 +407,12 @@
           if (val) {
             setShiftMaster(val);
           } else {
+            // Use current local shiftMaster if populated, otherwise default
             const defaultShifts = { "2026-07": getInitialShifts(INITIAL_STAFF, 31) };
-            shiftsRef.set(defaultShifts);
+            const localShiftsActive = shiftMasterRef.current && Object.keys(shiftMasterRef.current).length > 0;
+            shiftsRef.set(localShiftsActive ? shiftMasterRef.current : defaultShifts).catch(err => {
+              console.error("Firebase shifts bootstrap error:", err);
+            });
           }
         }, handleSyncError);
 
@@ -535,7 +552,10 @@
       // --- Database Write Helper Wrapper ---
       const writeShifts = (updatedShifts) => {
         if (firebaseDb) {
-          firebaseDb.ref("shifts").set(updatedShifts);
+          firebaseDb.ref("shifts").set(updatedShifts).catch(err => {
+            console.error("Firebase writeShifts error:", err);
+            addToast("บันทึกตารางเวรไม่สำเร็จ: สิทธิ์การเข้าถึงถูกปฏิเสธ (ตรวจสอบ Firebase Security Rules)", "error");
+          });
         } else {
           setShiftMaster(updatedShifts);
         }
@@ -543,7 +563,10 @@
 
       const writeStaff = (updatedStaff) => {
         if (firebaseDb) {
-          firebaseDb.ref("staff").set(updatedStaff);
+          firebaseDb.ref("staff").set(updatedStaff).catch(err => {
+            console.error("Firebase writeStaff error:", err);
+            addToast("บันทึกข้อมูลพนักงานไม่สำเร็จ: สิทธิ์การเข้าถึงถูกปฏิเสธ (ตรวจสอบ Firebase Security Rules)", "error");
+          });
         } else {
           setStaffList(updatedStaff);
         }
@@ -551,7 +574,10 @@
 
       const writeSwaps = (updatedSwaps) => {
         if (firebaseDb) {
-          firebaseDb.ref("swaps").set(updatedSwaps);
+          firebaseDb.ref("swaps").set(updatedSwaps).catch(err => {
+            console.error("Firebase writeSwaps error:", err);
+            addToast("บันทึกคำขอแลกเวรไม่สำเร็จ: สิทธิ์การเข้าถึงถูกปฏิเสธ (ตรวจสอบ Firebase Security Rules)", "error");
+          });
         } else {
           setSwapRequests(updatedSwaps);
         }
@@ -559,7 +585,10 @@
 
       const writeNotifications = (updatedNotif) => {
         if (firebaseDb) {
-          firebaseDb.ref("notifications").set(updatedNotif);
+          firebaseDb.ref("notifications").set(updatedNotif).catch(err => {
+            console.error("Firebase writeNotifications error:", err);
+            addToast("บันทึกการแจ้งเตือนไม่สำเร็จ: สิทธิ์การเข้าถึงถูกปฏิเสธ (ตรวจสอบ Firebase Security Rules)", "error");
+          });
         } else {
           setNotifications(updatedNotif);
         }
